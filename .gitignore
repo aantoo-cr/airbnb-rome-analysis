@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+#---------------------------------added by anto 
+# Data files (optional)
+data/processed/
+
+# macOS
+.DS_Store
