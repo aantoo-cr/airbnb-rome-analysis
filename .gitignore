@@ -219,7 +219,7 @@ __marimo__/
 
 #---------------------------------added by anto 
 # Data files (optional)
-data/processed/
+data/
 
 # macOS
 .DS_Store
