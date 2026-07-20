@@ -128,13 +128,6 @@ Merges the two feature sets produced above into one modeling-ready table:
 
 The first predictive model, using `final_dataset.csv`:
 
-**Preprocessing:**
-- Median-imputes any remaining missing numeric values.
-- Decomposes `latest_review_date` into year/month/day; derives `days_since_last_review` from `last_review`.
-- Drops the listing identifier.
-- One-hot encodes `property_type`, `room_type`, and `instant_bookable` (`drop_first=True`).
-- Trims `price` to the 1st–99th percentile to reduce the influence of extreme luxury/outlier listings.
-- 80/20 train/test split (`random_state=42`).
 
 **Modeling:** a baseline `RandomForestRegressor`, then hyperparameter tuning via
 `RandomizedSearchCV` (20 iterations, 5-fold CV, tuning `n_estimators`, `max_depth`,
@@ -162,14 +155,6 @@ A linear baseline against Random Forest, using the **same** `final_dataset.csv`,
 99th percentile outlier trimming on `price`, and the same 80/20 split (`random_state=42`) as
 Notebook 06, so results are directly comparable.
 
-**Preprocessing:** the notebook assumes `05_final_dataset.ipynb` already handles missing-value
-treatment, date feature engineering, and encoding — it only re-checks and one-hot encodes
-`sentiment_label` (the one remaining categorical column). It also includes a defensive
-safety-net step: any fully-empty numeric column still present in `final_dataset.csv` (currently
-`host_response_rate`, `host_acceptance_rate`, `host_experience_days` — see the caveat under
-Notebook 02) is dropped rather than median-imputed, since a 100%-missing column has no median to
-impute with and would otherwise break `LinearRegression.fit()`. Any other numeric column with
-partial missing values is median-imputed as an extra safeguard.
 
 > Because of this, Notebook 07's feature matrix has 3 fewer columns than Notebook 06's (which
 > keeps those empty columns — Random Forest tolerates them natively). The effect on Random
@@ -210,13 +195,72 @@ signal of non-linear or interaction effects).
 
 ## Notebook 08 — XGBoost Model
 
+# XGBoost Regressor: Overview and Parameter Guide
+
+## What is XGBoost Regressor?
+
+**XGBoost** (eXtreme Gradient Boosting) is an optimized, highly efficient implementation of the **Gradient Boosted Decision Trees (GBDT)** algorithm designed for speed, scalability, and state-of-the-art predictive performance.
+
+Unlike **Random Forest** (which trains multiple deep decision trees independently in parallel and averages their predictions), **XGBoost builds shallow decision trees sequentially**. 
+
+### How it works:
+1. It starts with a baseline prediction (e.g., the average price of all listings).
+2. It calculates the prediction errors (residuals) for every data point.
+3. It trains a new shallow tree **specifically to predict those residuals** (correcting the mistakes of the previous trees).
+4. It updates the overall prediction by adding the new tree's output, scaled by a learning rate.
+5. This process repeats sequentially for a specified number of iterations.
+
+---
+
+## Core Parameters Explained
+
+Below is a precise breakdown of the parameters configured in your model:
+
+### 1. `n_estimators=100` (Number of Trees)
+* **What it does:** Sets the total number of sequential decision trees to be built during training.
+* **The Mechanism:** Because boosting is additive, trees are built one after another. 
+* **The Impact:** 
+  * If set **too low**, the model will underfit and fail to capture complex relationships.
+  * If set **too high**, the model will overfit by capturing random noise in the training set, and training will take significantly longer.
+
+### 2. `learning_rate=0.1` (Shrinkage / Step Size)
+* **What it does:** Scalese the contribution of each new tree added to the model (technically called $\eta$).
+* **The Mechanism:** When a new tree is trained to correct the errors of previous trees, its predictions are multiplied by the `learning_rate` (e.g., $0.1$ or $10\%$) before being added to the final score. This forces the model to take small, conservative steps toward the optimal solution.
+* **The Impact:** 
+  * Lower values (like $0.05$ or $0.1$) make the learning process more robust and less prone to overfitting, but require a higher `n_estimators` to fully converge.
+
+### 3. `max_depth=6` (Maximum Tree Depth)
+* **What it does:** Restricts the maximum number of splits (levels) allowed for any single decision tree in the ensemble.
+* **The Mechanism:** A tree with a `max_depth=6` can split up to 6 consecutive times, creating a maximum of $2^6 = 64$ terminal leaf nodes.
+* **The Impact:** 
+  * Higher values allow individual trees to capture highly specific multi-variable interactions (raising the risk of overfitting).
+  * Values between $3$ and $9$ are typically optimal for tabular data.
+
+### 4. `random_state=42` (Reproducibility Seed)
+* **What it does:** Sets a constant seed for the internal pseudo-random number generator.
+* **The Mechanism:** XGBoost uses stochastic processes (such as random row/column sampling) to improve generalization. Fixing this seed ensures that these random choices are identical every time the code runs.
+* **The Impact:** Guarantees that your performance metrics (MAE, RMSE, $R^2$) remain completely identical across different runs, notebooks, and machines.
+
+### 5. `n_jobs=-1` (Parallel Execution)
+* **What it does:** Controls the number of CPU threads allocated to run the training process.
+* **The Mechanism:** Setting `n_jobs=-1` instructs your operating system to utilize all available CPU cores in parallel.
+* **The Impact:** Drastically reduces training time—especially during hyperparameter tuning (like `RandomizedSearchCV`)—without affecting the mathematical accuracy of the final model.
+
+---
+
+## Parameter Quick-Reference
+
+| Parameter | Default Value | Standard Tuning Range | Primary Objective |
+| :--- | :---: | :---: | :--- |
+| **`n_estimators`** | `100` | `100 - 1000` | Controls overall model capacity and training duration. |
+| **`learning_rate`** | `0.3` | `0.01 - 0.2` | Slows down learning speed to improve generalization. |
+| **`max_depth`** | `6` | `3 - 10` | Limits the complexity of individual trees to prevent overfitting. |
+| **`random_state`** | `None` | Any Integer | Ensures reproducibility of results across runs. |
+| **`n_jobs`** | `None` | `-1` | Accelerates computations using multi-core processing. |
 A gradient-boosted trees model (`XGBRegressor`), evaluated against the same `final_dataset.csv`
 and the same 80/20 split (`random_state=42`) as Notebooks 06 and 07.
 
-**Preprocessing:** categorical columns (object/category dtype) are one-hot encoded via a
-`ColumnTransformer` (`handle_unknown="ignore"`); all remaining numeric/boolean columns pass
-through unchanged (`remainder="passthrough"`). No explicit missing-value imputation step is
-included — XGBoost, like Random Forest, handles NaN natively.
+
 
 > **Alignment caveat:** unlike Notebooks 06 and 07, this notebook does **not** trim `price` to
 > the 1st–99th percentile before splitting. That means Notebook 08 is training and evaluating on
