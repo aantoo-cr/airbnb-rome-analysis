@@ -158,9 +158,9 @@ The first predictive model, using `final_dataset.csv`:
 
 | Metric | Naive baseline (predict the mean) | Random Forest (tuned) |
 |---|---|---|
-| RMSE | **81.73** | **79.28** |
-| MAE | **46.49** | **45.30** |
-| R² | **0.5429** | **0.5699** |
+| RMSE | **81.73** | **79.68** |
+| MAE | **46.31** | **45.51** |
+| R² | **0.5469** | **0.5656** |
 
 The model explains roughly 57% of the variance in listing price — a solid first result given
 how heterogeneous Airbnb pricing behavior tends to be.
@@ -189,9 +189,9 @@ linear.
 
 | Metric  | Linear Regression (baseline) | After (tuned) |
 |--- | ---|---|
-| RMSE |  *89.62​* | *89.63​* |
-| MAE |  *53.16​* | *89.63​* |
-| R² |  *0.4504​* | *0.4503​* |
+| RMSE |  *89.83​* | *89.87​* |
+| MAE |  *53.33* | *53.36* |
+| R² |  *0.4479​* | *0.4473​* |
 
 
 
@@ -294,9 +294,9 @@ trade-off for the presentation.
 
 | Metric | Naive baseline (predict the mean) | XGBoost (tuned) |
 |---|---|---|
-| RMSE | *76.17​​* | *75.53​​* |
-| MAE | *43.14​* | *43.03​* |
-| R² | *0.6030​* | *0.6096​* |
+| RMSE | *77.2688​​* | *75.98​​* |
+| MAE | *43.7136* | *42.94​* |
+| R² | *0.5914* | *0.6050* |
 
 
 **Interpretability:** feature importances are extracted from the fitted `XGBRegressor` and
@@ -311,9 +311,11 @@ rankings in the Feature Selection section of the presentation.
 | Model | RMSE | MAE | R² |
 |---|---|---|---|
 | Baseline (Mean) | *120.94​* | *94.50​* | 0 |
-| Random Forest | *78.20​* | *44.85​* | *0.581​* |
-| Linear Regression | *88.40​* | *52.10​* | *0.465​* |
-| XGBoost (tuned) | *76.17​* | *43.14​* | *0.603​* |
+| XGboost | *75.98​* | *42.94​* | *0.6050​* |
+| Linear Regression | *89.87​* | *53.36​* | *0.4473​* |
+| Random forest (tuned) | *79.68​* | *45.51​* | *0.5656​* |
+
+
 
 Fill in the Linear Regression and XGBoost rows once both notebooks have been run end-to-end on
 the same, finalized `final_dataset.csv` (and once Notebook 08's outlier trimming is aligned with
