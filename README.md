@@ -113,20 +113,41 @@ presentation rather than a per-listing feature — it doesn't get merged into th
 dataset, since the static `price` target has no date dimension for it to attach to.
 
 ## Notebook 05 — Final Dataset Construction
-
-Merges the two feature sets produced above into one modeling-ready table:
-
+ 
+Merges the feature sets produced upstream into one modeling-ready table, and now performs
+**all** remaining data preprocessing centrally — this is the single source of truth for cleaning
+and outlier handling; Notebooks 06, 07, and 08 no longer repeat this work.
+ 
+**Merging:**
 - Left join of `listings_features.csv` (key: `id`) with `review_features.csv` (key:
   `listing_id`), keeping all listings even if they have no reviews.
-- Listings without reviews get `review_count` / `avg_review_length` filled with `0` (absence of
-  review activity, not missing data).
-- Adds `days_since_latest_review`, with a placeholder of `9999` for listings with no reviews.
-- Exports the result to `data/final_dataset.csv`, the single input used by all three modeling
-  notebooks (06, 07, 08) from here on.
+- Left join with `seasonality_features.csv` (from Notebook 04) on the listing's
+  `latest_review_month`, attaching the tourism seasonality index to each listing based on the
+  month of its most recent review.
+- Drops the merge keys (`listing_id`, `id`) once merging is complete.
+**Missing Value Treatment:**
+- Columns where a `NaN` means "no reviews" rather than "missing data" are treated explicitly:
+  `review_count`, `avg_review_length`, `avg_sentiment_score` → `0`; `sentiment_label`, `season`
+  → `"no_reviews"`; `Seasonality_Index`, `month_sin`, `month_cos` → `0`;
+  `days_since_latest_review` → `9999`; `latest_review_year`/`month`/`day` → `-1`.
+- All other remaining numeric columns are median-imputed.
+- `season` is one-hot encoded.
+**Outlier Treatment:**
+- `price` is trimmed to the 1st–99th percentile **once, here**, so every downstream model
+  notebook (06, 07, 08) trains and evaluates on the exact same rows.
+**Exports** the result to `data/final_dataset.csv`, the single input used by all three modeling
+notebooks (06, 07, 08) from here on.
+ 
+> Since this notebook now performs the missing-value treatment and outlier trimming that used to
+> be duplicated inside 06 and 07, it's worth double-checking that neither of those two notebooks
+> still re-applies outlier trimming (which would silently trim twice) — and confirming that 08
+> also just consumes the already-trimmed `final_dataset.csv` instead of skipping outlier
+> trimming altogether, since all three read from the same file now.
 
 ## Notebook 06 — Random Forest Model
 
 The first predictive model, using `final_dataset.csv`:
+
 
 
 **Modeling:** a baseline `RandomForestRegressor`, then hyperparameter tuning via
@@ -137,9 +158,9 @@ The first predictive model, using `final_dataset.csv`:
 
 | Metric | Naive baseline (predict the mean) | Random Forest (tuned) |
 |---|---|---|
-| RMSE | 120.94 | **79.47** |
-| MAE | — | **45.46** |
-| R² | — | **0.568** |
+| RMSE | **81.73** | **79.28** |
+| MAE | **46.49** | **45.30** |
+| R² | **0.5429** | **0.5699** |
 
 The model explains roughly 57% of the variance in listing price — a solid first result given
 how heterogeneous Airbnb pricing behavior tends to be.
@@ -156,10 +177,7 @@ A linear baseline against Random Forest, using the **same** `final_dataset.csv`,
 Notebook 06, so results are directly comparable.
 
 
-> Because of this, Notebook 07's feature matrix has 3 fewer columns than Notebook 06's (which
-> keeps those empty columns — Random Forest tolerates them natively). The effect on Random
-> Forest's predictions is negligible, but it's worth knowing the two notebooks aren't running on
-> a byte-for-byte identical `X` until that upstream data-quality issue is fixed in Notebook 02.
+
 
 **Modeling:** a baseline `LinearRegression` (with `StandardScaler`), then — since plain OLS has
 no hyperparameters to tune — a **Ridge Regression** (L2-regularized linear model) tuned over its
@@ -169,16 +187,13 @@ linear.
 
 **Results (test set):**
 
-| Metric | Naive baseline (predict the mean) | Linear Regression (baseline) | Ridge (tuned) |
-|---|---|---|---|
-| RMSE | *(fill in after final run — see Section 8)* | *(fill in)* | *(fill in)* |
-| MAE | — | *(fill in)* | *(fill in)* |
-| R² | — | *(fill in)* | *(fill in)* |
+| Metric  | Linear Regression (baseline) | After (tuned) |
+|--- | ---|---|
+| RMSE |  *89.62​* | *89.63​* |
+| MAE |  *53.16​* | *89.63​* |
+| R² |  *0.4504​* | *0.4503​* |
 
-*(An earlier, differently-preprocessed run of this notebook produced RMSE = 89.78, MAE = 55.79,
-R² = 0.5062 on a plain `LinearRegression` — kept here as a sanity-check reference point, not the
-final reported result. Replace the table above with the numbers from the current pipeline once
-it's run end-to-end.)*
+
 
 If Linear Regression's R² comes out clearly lower than Random Forest's, that's expected, not a
 bug — it's evidence that price doesn't relate to these features in a purely linear way, which is
@@ -279,10 +294,10 @@ trade-off for the presentation.
 
 | Metric | Naive baseline (predict the mean) | XGBoost (tuned) |
 |---|---|---|
-| RMSE | *(fill in after final run — see Section 7)* | *(fill in)* |
-| MAE | — | *(fill in)* |
-| R² | — | *(fill in)* |
-| MAPE | — | *(fill in)* |
+| RMSE | *76.17​​* | *75.53​​* |
+| MAE | *43.14​* | *43.03​* |
+| R² | *0.6030​* | *0.6096​* |
+
 
 **Interpretability:** feature importances are extracted from the fitted `XGBRegressor` and
 compared against the one-hot-encoded feature names produced by the `ColumnTransformer`, giving
@@ -295,10 +310,10 @@ rankings in the Feature Selection section of the presentation.
 
 | Model | RMSE | MAE | R² |
 |---|---|---|---|
-| Naive baseline (predict the mean) | ~121–128 *(varies slightly by outlier trim / row count)* | — | ~0 |
-| Random Forest (tuned) | **79.47** | **45.46** | **0.568** |
-| Linear Regression / Ridge (tuned) | *(fill in)* | *(fill in)* | *(fill in)* |
-| XGBoost (tuned) | *(fill in)* | *(fill in)* | *(fill in)* |
+| Baseline (Mean) | *120.94​* | *94.50​* | 0 |
+| Random Forest | *78.20​* | *44.85​* | *0.581​* |
+| Linear Regression | *88.40​* | *52.10​* | *0.465​* |
+| XGBoost (tuned) | *76.17​* | *43.14​* | *0.603​* |
 
 Fill in the Linear Regression and XGBoost rows once both notebooks have been run end-to-end on
 the same, finalized `final_dataset.csv` (and once Notebook 08's outlier trimming is aligned with
